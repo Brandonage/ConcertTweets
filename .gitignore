@@ -1,0 +1,14 @@
+
+*.dat
+
+PythonCode/cols
+
+PythonCode/rows
+
+PythonCode/sp1
+
+PythonCode/spRec
+
+PythonCode/sptest
+
+PythonCode/sptrain
