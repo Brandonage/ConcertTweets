@@ -83,7 +83,7 @@ def createRecMF(trainMatrix,factors):
 
 
 ## It creates a Recommendation Matrix using user collaborative filtering from a training Matrix
-def createCosRec(trainMatrix):
+def createCosRec(trainMatrix,neighbours):
     spRec = coo_matrix((1,trainMatrix.shape[1])) ## We create an sparse Matrix that we are going to keep filling with rows for each recommendation 
     ##spRec = coo_matrix((nUsers,nEvents))
     for i in range(0, trainMatrix.shape[0]):   
@@ -100,14 +100,14 @@ def createCosRec(trainMatrix):
         block = block[block.dist<1] ## We don't want users that have a negative correlation 
         block = block[block.dist>1e-12]  ## We don't take the ones whose distance is almost 0 because that means they are the same
         block = block.sort('dist',ascending=1) ## The ones with the lower distance first
-        top5 = block.head(5)
-        if not(top5.empty):
-            top5rou = top5.iloc[:,1].values
-            top5dist = top5.iloc[:,0].values
-            print(top5dist,i)
-            auxMatrix= trainMatrix[top5rou] ## Our five nearest neighbours
-            auxMatrix = auxMatrix.toarray() * (1-top5dist[:,None]) ## We multiply them by the similarity W or (1-dist)
-            w = buildVector(top5rou,top5dist,trainMatrix,axis=0) 
+        topN = block.head(neighbours)
+        if not(topN.empty):
+            topNrou = topN.iloc[:,1].values
+            topNdist = topN.iloc[:,0].values
+            print(topNdist,i)
+            auxMatrix= trainMatrix[topNrou] ## Our five nearest neighbours
+            auxMatrix = auxMatrix.toarray() * (1-topNdist[:,None]) ## We multiply them by the similarity W or (1-dist)
+            w = buildVector(topNrou,topNdist,trainMatrix,axis=0)
             finalRec = np.sum(auxMatrix,axis=0)/w ## We sum them by the column and divide them by the w vector
             finalRec[np.isnan(finalRec)]=0 ## we set to 0's the ones that have nan values after dividing by the W
         else:
@@ -120,7 +120,7 @@ def createCosRec(trainMatrix):
 
 
 
-def createCosRecItem(trainMatrix):
+def createCosRecItem(trainMatrix, neighbours):
     spRec = coo_matrix((trainMatrix.shape[0],1)) ## We create an sparse Matrix that we are going to keep filling with columns for each recommendation
     ##spRec = coo_matrix((nUsers,nEvents))
     for i in range(0, trainMatrix.shape[1]):   
@@ -137,14 +137,14 @@ def createCosRecItem(trainMatrix):
         block = block[block.dist<1] ## We don't want users that have a negative correlation
         block = block[block.dist>1e-12] ## We don't take the ones whose distance is almost 0 because that means they are the same
         block = block.sort('dist',ascending=1) ## The ones with the lower distance first
-        top5 = block.head(5)
-        if not(top5.empty):
-            top5col = top5.iloc[:,0].values
-            top5dist = top5.iloc[:,1].values
-            print(top5dist,i)
-            auxMatrix= trainMatrix[:,top5col] ## Our five nearest neighbours
-            auxMatrix = auxMatrix.toarray() * (1-top5dist[None,:]) ## We multiply them by the similarity W or (1-dist)
-            w = buildVector(top5col,top5dist,trainMatrix,axis=1) ## We create our vector W
+        topN = block.head(neighbours)
+        if not(topN.empty):
+            topNcol = topN.iloc[:,0].values
+            topNdist = topN.iloc[:,1].values
+            print(topNdist,i)
+            auxMatrix= trainMatrix[:,topNcol] ## Our five nearest neighbours
+            auxMatrix = auxMatrix.toarray() * (1-topNdist[None,:]) ## We multiply them by the similarity W or (1-dist)
+            w = buildVector(topNcol,topNdist,trainMatrix,axis=1) ## We create our vector W
             finalRec = np.sum(auxMatrix,axis=1)/w ## Divide the sum by the vector W
             finalRec[np.isnan(finalRec)]=0
             finalRec = finalRec.reshape(trainMatrix.shape[0],1)  ### we have to reshape it for some reason
@@ -161,8 +161,28 @@ def createCosRecItem(trainMatrix):
 def calculateRMSE(recMatrix,testMatrix):
     pred = recMatrix[testMatrix.nonzero()[0],testMatrix.nonzero()[1]] ## Put in an array all the values from the recommendation matrix that are in the same pos as the test matrix
     test = testMatrix[testMatrix.nonzero()[0],testMatrix.nonzero()[1]] ## Put in an array all the values from the test matrix
-    rmse=np.sum(np.square(pred-test))/len(sptest.data) ## The formula to calculate RMSE
+    rmse=np.sum(np.square(pred-test))/len(testMatrix.data) ## The formula to calculate RMSE
     return(np.sqrt(rmse))
+
+def topN(trainMatrix,probeMatrix, recMatrix):
+    nhits = 0
+    for i in xrange(probeMatrix.shape[0]): ## For each user
+        fives = (probeMatrix[i]==5).nonzero()[1]  ## We take the items positions rated with fives
+        unrated = (trainMatrix[i]==0).nonzero()[1]   ## We take all the unrated items of that user
+        for fpos in fives:  ### for each five that the user has
+            nsample = 1000
+            taken = random.sample(unrated,nsample) ## We randomly select 1000 items that have been unrated
+            taken.append(fpos) ## We also include the item that is five in the test set to see its value in the recommendation
+            taken.sort() ## we sort the rows taken
+            taken = np.array(taken) ## we need to change it to an array so we can use (recMatrix[i,taken]<>0) as index
+            nonZero = taken[(recMatrix[i,taken]<>0).nonzero()[1]]  ### which of this items are not 0??
+            tuples = zip(recMatrix[i,nonZero].toarray()[0],nonZero)  ## we do tuples (rating, item)
+            tuples = sorted(tuples,key=lambda x:x[0],reverse=True) ## We sort by rating
+            if (fpos in [e[1] for e in tuples[0:19]]): ### If the item that was five it's in the top 20
+                nhits+=1 ## we have a hit
+    recall = np.true_divide(nhits,len((probeMatrix==5).data)) ## recall it's the number of hits divided by the number of 5's in the test set
+    prec = recall/20
+    return (prec, recall)
 
 
 ### We set the paths for the different files
@@ -177,6 +197,8 @@ eventsdf = pd.read_table(pathevents, sep=',', quotechar="\"")
 ratingsdf = pd.read_table(pathratings, sep=',', quotechar="\"",encoding="latin-1")
 usersdf = pd.read_table(pathusers, sep=',', quotechar="\"",encoding="latin-1")
 
+
+### Copy from here
 
 u = usersdf["userid"]  ## An array with the userId's
 
@@ -229,6 +251,45 @@ for i in range(0,20):
     spRec = createCosRecItem(sptrain)
     rmse = calculateRMSE(spRec,sptest)
     cvrmse.append(rmse)
+
+
+neighboursAndFactors = [(5,30),(20,50),(30,75),(50,100)]
+userRMSE = []
+userPrec = []
+userRecall = []
+itemRMSE = []
+itemPrec = []
+itemRecall = []
+factorsRMSE = []
+factorsPrec = []
+factorsRecall = []
+sptrain, sptest = createTrainAndTest(sp1b,20)
+for n, f in neighboursAndFactors:
+    ### We start with user CF
+    spRec = createCosRec(sptrain,n)
+    prec, recall = topN(sptrain,sptest, spRec)
+    rmse = calculateRMSE(spRec,sptest)
+    userRMSE.append(rmse)
+    userPrec.append(prec)
+    userRecall.append(recall)
+    ### We continue with item CF
+    spRec = createCosRecItem(sptrain,n)
+    prec, recall = topN(sptrain,sptest, spRec)
+    rmse = calculateRMSE(spRec,sptest)
+    itemRMSE.append(rmse)
+    itemPrec.append(prec)
+    itemRecall.append(recall)
+    ### We continue with MF ##############
+    spRec = createRecMF(sptrain,f)
+    prec, recall = topN(sptrain,sptest, spRec)
+    rmse = calculateRMSE(spRec,sptest)
+    factorsRMSE.append(rmse)
+    factorsPrec.append(prec)
+    factorsRecall.append(recall)
+
+results = []
+for i in xrange(len(neighboursAndFactors)):
+    results.append(round(np.mean(userPrec[i]),4))
 
 
 

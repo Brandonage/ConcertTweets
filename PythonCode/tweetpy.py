@@ -16,6 +16,18 @@ auth.set_access_token(access_token, access_token_secret)
 
 api = tweepy.API(auth)
 
+states = ['AZ','IL', 'OH', 'WA', 'NY', 'HI','AR', 'TX', 'MI', 'CA', 'PA', 'FL', 'NE', 'UT', 'WI',
+                   'MO', 'NC', 'CO', 'NV', 'TN', 'LA', 'VA','DC', 'MD', 'MS', 'NJ', 'CT','OR', 'MA', 'GA',
+                  'ID', 'SC','MN', 'WV', 'KY', 'DE','IA','Costa Rica','VT', 'RI',
+                  'IN', 'AL', 'NH', 'KS','OK', 'ME','Pennsylvan','WY', 'NM','MT','ND', 'SD','AK']
+
+def nRatingsGreaterThan(n,p):
+    g = p.groupby('userid').size()
+    indx = g[g>20].index
+    p2 = p.loc[p['userid'].isin(indx)]
+    return p2
+
+
 
 ### We set the paths for the different files
 
@@ -29,9 +41,17 @@ eventsdf = pd.read_table(pathevents, sep=',', quotechar="\"")
 ratingsdf = pd.read_table(pathratings, sep=',', quotechar="\"",encoding="latin-1")
 usersdf = pd.read_table(pathusers, sep=',', quotechar="\"",encoding="latin-1")
 
-u = usersdf["userid"]  ## An array with the userId's
+eventsdf = eventsdf.drop_duplicates("eventId")
+## We join the two dataframes by eventId
+joindf = pd.merge(ratingsdf,eventsdf, how="inner",on="eventId")
+joindf = nRatingsGreaterThan(20,joindf)
 
-api.friends_ids(77662665)
+joindf = joindf.loc[joindf['state'].isin(states)]
+
+
+u = joindf["userid"].drop_duplicates()  ## An array with the userId's
+u.index = range(0,len(u))
+
 
 listCommonFriends = []
 
@@ -40,10 +60,21 @@ for user in u:
         try:
             friends = np.asarray(api.friends_ids(user))
         except tweepy.TweepError, e:
+            print user
+            print e
             ##print e.message[0]['code']
-            print('Entering sleep for five minutes')
-            time.sleep(60*5)
-            continue
+            try:
+                if e.args[0][0]['code']==88:
+                    print('Entering sleep for five minutes')
+                    time.sleep(60*5)
+                    continue
+                else:
+                    listCommonFriends.append([])
+                    break
+            except TypeError, type:
+                print('No Code')
+                listCommonFriends.append([])
+                break
         commonFriends = [id for id in friends if id in u]
         listCommonFriends.append(commonFriends)
         break
@@ -66,8 +97,10 @@ for user in u:
                     listOfUsers.append('NA')
                     break
             except TypeError, type:
+                print('No code')
+                listOfUsers.append('NA')
                 time.sleep(60*5)
-                continue
+                break
         break
 
 [{u'message': u'User has been suspended.', u'code': 63}]
@@ -80,3 +113,12 @@ public_tweets = api.home_timeline()
 
 for tweet in public_tweets:
     print tweet.text
+
+with open('listOfUsers','rb') as handle:
+    listOfUsers = pickle.load(handle) # we load
+
+i=0
+for element in listCommonFriends2:
+    if element:
+        print(u[i], " is following", element)
+    i=i+1

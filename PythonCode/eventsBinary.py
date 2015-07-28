@@ -71,7 +71,7 @@ def createRecMF(trainMatrix,factors):
 
 
 ## It creates a Recommendation Matrix using user collaborative filtering from a training Matrix
-def createCosRec(trainMatrix):
+def createCosRec(trainMatrix,neighbours):
     spRec = coo_matrix((1,trainMatrix.shape[1])) ## We create an sparse Matrix that we are going to keep filling with rows for each recommendation 
     for i in range(0, trainMatrix.shape[0]):
         nonZeroCols = trainMatrix.getrow(i).nonzero()[1]
@@ -86,14 +86,14 @@ def createCosRec(trainMatrix):
         block = block[block.rou!=i] ## We discard the neighbour that is the same as U
         block = block[block.dist>1e-12] ## We don't take the ones whose distance is almost 0 because that means they are the same
         block = block.sort('dist',ascending=1) ## The ones with the lower distance first
-        top5 = block.head(5)
-        if not(top5.empty):
-            top5rou = top5.iloc[:,1].values
-            top5dist = top5.iloc[:,0].values
-            print(top5dist,i)
-            auxMatrix= trainMatrix[top5rou] ## Our five nearest neighbours
-            auxMatrix = auxMatrix.toarray() * (1-top5dist[:,None]) ## We multiply them by the similarity W or (1-dist)
-            finalRec = np.sum(auxMatrix,axis=0)/len(top5) ## We sum them by the column and average them for the recommendation
+        topN = block.head(neighbours)
+        if not(topN.empty):
+            topNrou = topN.iloc[:,1].values
+            topNdist = topN.iloc[:,0].values
+            print(topNdist,i)
+            auxMatrix= trainMatrix[topNrou] ## Our five nearest neighbours
+            auxMatrix = auxMatrix.toarray() * (1-topNdist[:,None]) ## We multiply them by the similarity W or (1-dist)
+            finalRec = np.sum(auxMatrix,axis=0)/len(topN) ## We sum them by the column and average them for the recommendation
         else:
             finalRec = np.zeros(trainMatrix.shape[1])   
         finalRec[nonZeroCols]=0 ## We don't want to recommend the same concerts a user have been to.
@@ -103,7 +103,7 @@ def createCosRec(trainMatrix):
     return(spRec)
 
 
-def createCosRecItem(trainMatrix):
+def createCosRecItem(trainMatrix, neighbours):
     spRec = coo_matrix((trainMatrix.shape[0],1)) ## We create an sparse Matrix that we are going to keep filling with columns for each recommendation
     for i in range(0, trainMatrix.shape[1]):   
         nonZeroRows = trainMatrix.getcol(i).nonzero()[0]
@@ -118,14 +118,14 @@ def createCosRecItem(trainMatrix):
         block = block[block.colmns!=i] ## we discard the same item
         block = block[block.dist>1e-12] ## We don't take the ones close to 0, since it means they are almost the same
         block = block.sort('dist',ascending=1)
-        top5 = block.head(5)
-        if not(top5.empty):
-            top5col = top5.iloc[:,0].values
-            top5dist = top5.iloc[:,1].values
-            print(top5dist,i)
-            auxMatrix= trainMatrix[:,top5col] ## Our five nearest neighbours
-            auxMatrix = auxMatrix.toarray() * (1-top5dist[None,:]) ## We multiply them by the similarity W or (1-dist)
-            finalRec = np.sum(auxMatrix,axis=1)/len(top5) ## We sum them by the row and average them for the recommendation
+        topN = block.head(neighbours)
+        if not(topN.empty):
+            topNcol = topN.iloc[:,0].values
+            topNdist = topN.iloc[:,1].values
+            print(topNdist,i)
+            auxMatrix= trainMatrix[:,topNcol] ## Our five nearest neighbours
+            auxMatrix = auxMatrix.toarray() * (1-topNdist[None,:]) ## We multiply them by the similarity W or (1-dist)
+            finalRec = np.sum(auxMatrix,axis=1)/len(topN) ## We sum them by the row and average them for the recommendation
             finalRec = finalRec.reshape(trainMatrix.shape[0],1)  ### we have to reshape it for some reason
         else:
             finalRec = np.zeros(trainMatrix.shape[0])
@@ -160,7 +160,27 @@ def calculatePrecAndRecall(recMatrix,testMatrix):
             print(prec)
             totalPrec.append(prec)
             totalRecall.append(recall)
-    return(totalPrec,totalRecall)
+    return(np.mean(totalPrec),np.mean(totalRecall))
+
+def topN(trainMatrix,probeMatrix, recMatrix):
+    nhits = 0
+    for i in xrange(probeMatrix.shape[0]): ## For each user
+        fives = (probeMatrix[i]==5).nonzero()[1]  ## We take the items positions rated with fives
+        unrated = (trainMatrix[i]==0).nonzero()[1]   ## We take all the unrated items of that user
+        for fpos in fives:  ### for each five that the user has
+            nsample = 1000
+            taken = random.sample(unrated,nsample) ## We randomly select 1000 items that have been unrated
+            taken.append(fpos) ## We also include the item that is five in the test set to see its value in the recommendation
+            taken.sort() ## we sort the rows taken
+            taken = np.array(taken) ## we need to change it to an array so we can use (recMatrix[i,taken]<>0) as index
+            nonZero = taken[(recMatrix[i,taken]<>0).nonzero()[1]]  ### which of this items are not 0??
+            tuples = zip(recMatrix[i,nonZero].toarray()[0],nonZero)  ## we do tuples (rating, item)
+            tuples = sorted(tuples,key=lambda x:x[0],reverse=True) ## We sort by rating
+            if (fpos in [e[1] for e in tuples[0:19]]): ### If the item that was five it's in the top 20
+                nhits+=1 ## we have a hit
+    recall = np.true_divide(nhits,len((probeMatrix==5).data))## recall it's the number of hits divided by the number of 5's in the test set
+    prec = recall/20
+    return (prec, recall)
 
 
 
@@ -211,13 +231,11 @@ y = pairs.loc[:,"userid"]
 ## We store in the array rows= [] the position of the rows inside the matrix that have ones 
 rows = []
 for value in y:
-    print(value)
     ## We compare the value of the data frame with the position in the u array
     rows.append(u[u==value].index[0])
 ## We do the same for the columns
 cols = []
 for value in x:
-    print(value)
     cols.append(e[e==value].index[0])  ## 7914534-fishbone-baltimore-shindig-festival-2014
 
 ## We create a repetition of ones to put inside the matrix
@@ -239,13 +257,58 @@ for i in range(0,20):
     
     spRec = createCosRecItem(sptrain)
     
-    (prec,recall) = calculatePrecAndRecall(spRec,sptest)
+    prec,recall = calculatePrecAndRecall(spRec,sptest)
     
-    overallPrec = sum(prec)/len(prec)
-    overallRecall = sum(recall)/len(recall)
 
-    cvprecision.append(overallPrec)
-    cvrecall.append(overallRecall)
+
+    cvprecision.append(prec)
+    cvrecall.append(recall)
+
+
+## We are going to do Grid search to find new parameters for our training methods
+
+neighboursAndFactors = [(5,30),(20,50),(30,75),(50,100)]
+
+
+for n, f in neighboursAndFactors:
+
+    userPrec = []
+    userRecall = []
+
+    itemPrec = []
+    itemRecall = []
+
+    factorsPrec = []
+    factorsRecall = []
+
+    sptrain, sptest = createTrainAndTest(sp1,20)
+    ### We continue with user CF
+    spRec = createCosRec(sptrain,n)
+    prec,recall = calculatePrecAndRecall(spRec,sptest)
+    userPrec.append(prec)
+    userRecall.append(recall)
+
+    ### We continue with item CF
+    spRec = createCosRecItem(sptrain,n)
+    prec,recall = calculatePrecAndRecall(spRec,sptest)
+
+    itemPrec.append(prec)
+    itemRecall.append(recall)
+
+    # ### We start with MF ##############
+    # spRec = createRecMF(sptrain,f)
+    # (prec,recall) = calculatePrecAndRecall(spRec,sptest)
+    # overallPrec = sum(prec)/len(prec)
+    # overallRecall = sum(recall)/len(recall)
+    #
+    #
+    # factorsPrec.append(overallPrec)
+    # factorsRecall.append(overallRecall)
+
+
+
+
+
     
  
 
