@@ -5,10 +5,7 @@ import pandas as pd
 import numpy as np
 import time
 
-consumer_key = 'T6eeCmaq96WR2VqjlMhs0AijD'
-consumer_secret = 'NGVIjthZ7tExhrwwrRu57yNy2pNMX6TeBqEtAVWTLLiZPpSdn6'
-access_token = '232900316-M3MR5wMdGGK1fP0ox8gwVwoQcgBLaRV2kAYwrFkq'
-access_token_secret = 'iQSmPRuvjVqmVyBohY8n8Lokase8rF4QcNwo7kKTYDCBF'
+
 
 auth = tweepy.OAuthHandler(consumer_key,consumer_secret)
 
