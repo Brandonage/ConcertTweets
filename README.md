@@ -1,6 +1,7 @@
 # ConcertTweets
 Repository for the analysis of the ConcertTweets dataset and design of a recommender system.
 This dataset was extracted using a Twitter streaming API, recollecting ratings given by users to concerts. Every time a user rates one gig in the BandsInTown app, a tweet can be automatically submitted, expressing the rating or the interest in going to this event. The dataset contains information on 250.000 ratings given by 61.803 users on 116.344 different events with 23.861 different bands. The ratings are both explicit (i.e ratings from 0..5) and implicit (i.e ratings indicating interest in the concert {‘Yes’, ‘Maybe’, ‘No’}.
+
 The objective of the system is to recommend new bands and events to users, based on what they liked before. This is achieved by finding groups of users that have a common taste for music, like for example "country rock". In this way, if user A and B are in the same group or cluster, we can suggest to user A bands that user B liked. This type of systems are an important part of internet services like Amazon, Pandora or Netflix, where we have endless items and possibilities to choose or consume.
 All of the experiments were implemented with Python and the help of the numpy, pandas, scipy, and nimfa libraries [5][7]. This libraries allow us to use basic computational elements of recommender systems like sparse matrices, matrices operations, database manipulation or random sampling. Also the programming language R and the library ggplot2 [4] was used for data visualisation
 
