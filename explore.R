@@ -5,6 +5,7 @@ pathusers = "/Users/alvarobrandon/GitHub/ConcertTweets/ConcertTweets_v2.5/users.
 ## We load the libraries we need
 library(data.table)
 library(scales)
+library(ggplot2)
 
 ## We check the structure of the .dat file
 
@@ -121,8 +122,10 @@ for (date in times){
 joined.dt$eventYear <- d
 
 graph <- ggplot(data= joined.dt,aes(factor(eventYear)))
-graph <- graph + geom_bar(aes(fill=factor(eventYear))) + stat_bin(aes(label=..count..), vjust=0, 
-                                                             geom="text", position="identity") + xlab("Year") + scale_fill_discrete(name="Year") + theme_bw()
+graph <- graph + geom_bar(aes(fill=factor(eventYear))) + 
+  stat_bin(aes(label=..count..), vjust=0, geom="text", position="identity") + 
+  xlab("Year") + scale_fill_discrete(name="Year") + theme_bw() + theme(text = element_text(size=16))
+  ###theme(legend.title = element_text(size=16),legend.text = element_text(size=16))
 
 
 
@@ -147,7 +150,7 @@ if (require(maps)) {
   p<- ggplot(world_map, aes(map_id = region)) +  geom_map(fill="white", map=world_map, color = "black") +
   geom_map(data = nratings, aes(fill = Freq, map_id=locs), map = world_map) + 
     expand_limits(x = world_map$long, y = world_map$lat) + scale_fill_gradient(low="moccasin", high="black") + 
-    ggtitle("Number of Ratings by Country")
+    ggtitle("Number of Ratings by Country") + theme_bw()  + theme(text = element_text(size=20)) 
 }
 
 ## To do a map of the states and the ratings we are going to change the abbreviate names
@@ -172,7 +175,7 @@ if (require(maps)) {
   p<- ggplot(states_map, aes(map_id = region)) +  geom_map(fill="white", map=states_map, color = "black") +
     geom_map(data = nratings, aes(fill = Freq, map_id=tolower(locs)), map = states_map) + 
     expand_limits(x = states_map$long, y = states_map$lat) + scale_fill_gradient(low="moccasin", high="black") + 
-    ggtitle("Number of Ratings by State")
+    ggtitle("Number of Ratings by State") + theme_bw()  + theme(text = element_text(size=20)) 
 }
 
 
